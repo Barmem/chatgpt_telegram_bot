@@ -8,6 +8,7 @@ import tempfile
 import pydub
 from pathlib import Path
 from datetime import datetime
+import re
 
 import telegram
 from telegram import (
@@ -32,19 +33,21 @@ from telegram.constants import ParseMode, ChatAction
 import config
 import database
 import openai_utils
+import fortune_requests
 
 
 # setup
 db = database.Database()
+requestsdb = fortune_requests.requestslist()
 logger = logging.getLogger(__name__)
 
 user_semaphores = {}
 user_tasks = {}
 
+# ⚪ /retry – спросить бота ещё раз
+# ⚪ /new – Начать новый диалог
+# ⚪ /mode – Select chat mode
 HELP_MESSAGE = """Commands:
-⚪ /retry – спросить бота ещё раз
-⚪ /new – Начать новый диалог
-⚪ /mode – Select chat mode
 ⚪ /settings – Показать настройки
 ⚪ /balance – Показать баланс
 ⚪ /help – Показать комманды
@@ -99,8 +102,8 @@ async def start_handle(update: Update, context: CallbackContext):
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
     db.start_new_dialog(user_id)
 
-    reply_text = "Я таролог, маг и предсказатель. Я использую таро-карты, чтобы предсказывать будущее и помочь людям в их жизни. \n\n"
-    reply_text += HELP_MESSAGE
+    reply_text = "Я таролог, маг и предсказатель. Я использую таро-карты, чтобы предсказывать будущее и помочь людям в их жизни. \n"
+    # reply_text += HELP_MESSAGE
 
     reply_text += "\nКак я могу помочь?"
 
@@ -230,12 +233,12 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
             return
 
         # send message if some messages were removed from the context
-        if n_first_dialog_messages_removed > 0:
-            if n_first_dialog_messages_removed == 1:
-                text = "✍️ <i>Note:</i> Your current dialog is too long, so your <b>first message</b> was removed from the context.\n Send /new command to start new dialog"
-            else:
-                text = f"✍️ <i>Note:</i> Your current dialog is too long, so <b>{n_first_dialog_messages_removed} first messages</b> were removed from the context.\n Send /new command to start new dialog"
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        # if n_first_dialog_messages_removed > 0:
+        #     if n_first_dialog_messages_removed == 1:
+        #         text = "✍️ <i>Note:</i> Your current dialog is too long, so your <b>first message</b> was removed from the context.\n Send /new command to start new dialog"
+        #     else:
+        #         text = f"✍️ <i>Note:</i> Your current dialog is too long, so <b>{n_first_dialog_messages_removed} first messages</b> were removed from the context.\n Send /new command to start new dialog"
+        #     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
     async with user_semaphores[user_id]:
         task = asyncio.create_task(message_handle_fn())
@@ -306,7 +309,7 @@ async def new_dialog_handle(update: Update, context: CallbackContext):
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
     db.start_new_dialog(user_id)
-    await update.message.reply_text("НАчало нового диалога ✅")
+    await update.message.reply_text("Начало нового диалога ✅")
 
     chat_mode = db.get_user_attribute(user_id, "current_chat_mode")
     await update.message.reply_text(f"{openai_utils.CHAT_MODES[chat_mode]['welcome_message']}", parse_mode=ParseMode.HTML)
@@ -483,10 +486,36 @@ async def post_init(application: Application):
         # BotCommand("/new", "Начать новый диалог"),
         # BotCommand("/mode", "Select chat mode"),
         # BotCommand("/retry", "Сгенерировать предыдущий ответ заново"),
-        BotCommand("/balance", "Показать баланс"),
-        BotCommand("/settings", "Показать настройки"),
-        BotCommand("/help", "Показать комманды"),
+        # BotCommand("/balance", "Показать баланс"),
+        # BotCommand("/settings", "Показать настройки"),
+        # BotCommand("/help", "Показать комманды"),
     ])
+
+async def contact_handler(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    text = "Сообщения:\n"
+    text += convert_to_dialogue(db.get_dialog_messages(user_id))
+    # for message_chunk in split_text_into_chunks(text, 4096):
+    #     try:
+    #         await context.bot.send_message(update.effective_chat.id, message_chunk, parse_mode=ParseMode.HTML)
+    #     except telegram.error.BadRequest:
+    #         # answer has invalid characters, so we send it without parse_mode
+    #         await context.bot.send_message(update.effective_chat.id, message_chunk)
+    message = update.message.text
+    requestsdb.add(message, text)
+    text = "Сейчас я вам перезвоню."
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+def convert_to_dialogue(messages):
+    dialogue = ''
+    for message in messages:
+        if 'user' in message:
+            user_message = message['user']
+            dialogue += f"Пользователь: {user_message}\n"
+        if 'bot' in message:
+            bot_message = message['bot']
+            dialogue += f"Бот: {bot_message}\n"
+    return dialogue
 
 def run_bot() -> None:
     application = (
@@ -505,23 +534,26 @@ def run_bot() -> None:
         user_ids = [x for x in config.allowed_telegram_usernames if isinstance(x, int)]
         user_filter = filters.User(username=usernames) | filters.User(user_id=user_ids)
 
+    pattern = re.compile(r'^(?:\+?7|8)?(?:[\s\-(_]+)?(\d{3})(?:[\s\-_)]+)?(\d{3})(?:[\s\-_]+)?(\d{2})(?:[\s\-_]+)?(\d{2})$')
+    application.add_handler(MessageHandler(filters.Regex(pattern), contact_handler))
+
     application.add_handler(CommandHandler("start", start_handle, filters=user_filter))
-    application.add_handler(CommandHandler("help", help_handle, filters=user_filter))
+    # application.add_handler(CommandHandler("help", help_handle, filters=user_filter))
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & user_filter, message_handle))
     # application.add_handler(CommandHandler("retry", retry_handle, filters=user_filter))
-    application.add_handler(CommandHandler("new", new_dialog_handle, filters=user_filter))
-    application.add_handler(CommandHandler("cancel", cancel_handle, filters=user_filter))
+    # application.add_handler(CommandHandler("new", new_dialog_handle, filters=user_filter))
+    # application.add_handler(CommandHandler("cancel", cancel_handle, filters=user_filter))
 
-    application.add_handler(MessageHandler(filters.VOICE & user_filter, voice_message_handle))
+    # application.add_handler(MessageHandler(filters.VOICE & user_filter, voice_message_handle))
 
     # application.add_handler(CommandHandler("mode", show_chat_modes_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(set_chat_mode_handle, pattern="^set_chat_mode"))
 
-    application.add_handler(CommandHandler("settings", settings_handle, filters=user_filter))
+    # application.add_handler(CommandHandler("settings", settings_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(set_settings_handle, pattern="^set_settings"))
 
-    application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
+    # application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
 
     application.add_error_handler(error_handle)
 

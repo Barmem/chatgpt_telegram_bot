@@ -3,7 +3,7 @@ version: "3"
 services:
   mongo:
     container_name: mongo
-    image: mongo:latest
+    image: mongo:4.4.18
     restart: always
     ports:
       - 127.0.0.1:${MONGODB_PORT:-27017}:${MONGODB_PORT:-27017}
@@ -34,5 +34,15 @@ services:
       - ME_CONFIG_MONGODB_AUTH_DATABASE=chatgpt_telegram_bot
       - ME_CONFIG_BASICAUTH_USERNAME=${MONGO_EXPRESS_USERNAME:-username}
       - ME_CONFIG_BASICAUTH_PASSWORD=${MONGO_EXPRESS_PASSWORD:-password}
+    depends_on:
+      - mongo
+
+  tarologist_telegram_bot:
+    container_name: Tarologist_telegram_bot
+    command: python3 bot/requesterbot.py
+    restart: always
+    build:
+      context: "."
+      dockerfile: tarot.Dockerfile
     depends_on:
       - mongo

@@ -2,7 +2,7 @@ from typing import Optional, Any
 
 import pymongo
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import config
 
@@ -125,3 +125,7 @@ class Database:
             {"_id": dialog_id, "user_id": user_id},
             {"$set": {"messages": dialog_messages}}
         )
+
+    def is_before_today(dt):
+        today = date.today()
+        return dt.date() < today
