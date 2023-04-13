@@ -2,7 +2,7 @@ from typing import Optional, Any
 
 import pymongo
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 import config
 
@@ -49,7 +49,8 @@ class Database:
 
             "n_used_tokens": {},
 
-            "n_transcribed_seconds": 0.0  # voice message transcription
+            "n_transcribed_seconds": 0.0 , # voice message transcription
+            "avaliable_requests": 3
         }
 
         if not self.check_if_user_exists(user_id):
@@ -126,6 +127,3 @@ class Database:
             {"$set": {"messages": dialog_messages}}
         )
 
-    def is_before_today(dt):
-        today = date.today()
-        return dt.date() < today

@@ -9,6 +9,7 @@ import pydub
 from pathlib import Path
 from datetime import datetime
 import re
+from datetime import datetime, timedelta, date
 
 import telegram
 from telegram import (
@@ -145,8 +146,20 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
     if await is_previous_message_not_answered_yet(update, context): return
 
     user_id = update.message.from_user.id
+    if db.get_user_attribute(user_id, "avaliable_requests") is None:
+        db.set_user_attribute(user_id, "avaliable_requests", 3)
+
+    if is_before_today(db.get_user_attribute(user_id, "last_interaction")):
+        new_req = db.get_user_attribute(user_id, "avaliable_requests") + 1
+        db.set_user_attribute(user_id, "avaliable_requests", new_req)
+
+    if db.get_user_attribute(user_id, "avaliable_requests") < 1:
+        msg = "Простите, сегодня я больше не могу проводить расклады, жду вас завтра!\n\nЛучшим способом определиться принять правильное решение - живая консультация с профессиональным тарологом по видеосвязи.\nДля вас рекомендую начать с малого расклада, если останутся вопросы, всегда сможете продлить.\n\nВ малом раскладе вы полноценно разберёте текущую ситуацию и получите рекомендации\n(990 руб, до 10 мин).\n\nВ большом раскладе мы успеем обсудить несколько жизненных ситуаций более развернуто\n(1990 руб, до 30 мин).\n\nНапишите ваш номер и я свяжусь в удобное для вас время."
+        await update.message.reply_text(msg)
+        return 0
+
     async def message_handle_fn():
-        chat_mode = db.get_user_attribute(user_id, "current_chat_mode")
+        chat_mode = db.get_user_attribute(user_id, "current_chat_mode", )
 
         # new dialog timeout
         if use_new_dialog_timeout:
@@ -220,6 +233,9 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
             )
 
             db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
+            new_req = db.get_user_attribute(user_id, "avaliable_requests") - 1
+            db.set_user_attribute(user_id, "avaliable_requests", new_req)
+
 
         except asyncio.CancelledError:
             # note: intermediate token updates only work when enable_message_streaming=True (config.yml)
@@ -516,6 +532,12 @@ def convert_to_dialogue(messages):
             bot_message = message['bot']
             dialogue += f"Бот: {bot_message}\n"
     return dialogue
+
+def is_before_today(dt):
+    if dt is None:
+        return True
+    today = date.today()
+    return dt.date() < today
 
 def run_bot() -> None:
     application = (
