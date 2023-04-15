@@ -155,6 +155,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
 
     if db.get_user_attribute(user_id, "avaliable_requests") < 1:
         msg = "Простите, сегодня я больше не могу проводить расклады, жду вас завтра!\n\nЛучшим способом определиться принять правильное решение - живая консультация с профессиональным тарологом по видеосвязи.\nДля вас рекомендую начать с малого расклада, если останутся вопросы, всегда сможете продлить.\n\nВ малом раскладе вы полноценно разберёте текущую ситуацию и получите рекомендации\n(990 руб, до 10 мин).\n\nВ большом раскладе мы успеем обсудить несколько жизненных ситуаций более развернуто\n(1990 руб, до 30 мин).\n\nНапишите ваш номер и я свяжусь в удобное для вас время."
+        db.set_user_attribute(user_id, "avaliable_requests", 0)
         await update.message.reply_text(msg)
         return 0
 
@@ -165,7 +166,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
         if use_new_dialog_timeout:
             if (datetime.now() - db.get_user_attribute(user_id, "last_interaction")).seconds > config.new_dialog_timeout and len(db.get_dialog_messages(user_id)) > 0:
                 db.start_new_dialog(user_id)
-                await update.message.reply_text(f"Starting new dialog due to timeout (<b>{openai_utils.CHAT_MODES[chat_mode]['name']}</b> mode) ✅", parse_mode=ParseMode.HTML)
+                # await update.message.reply_text(f"Starting new dialog due to timeout (<b>{openai_utils.CHAT_MODES[chat_mode]['name']}</b> mode) ✅", parse_mode=ParseMode.HTML)
         db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
         # in case of CancelledError
@@ -563,19 +564,19 @@ def run_bot() -> None:
     # application.add_handler(CommandHandler("help", help_handle, filters=user_filter))
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & user_filter, message_handle))
-    # application.add_handler(CommandHandler("retry", retry_handle, filters=user_filter))
-    # application.add_handler(CommandHandler("new", new_dialog_handle, filters=user_filter))
-    # application.add_handler(CommandHandler("cancel", cancel_handle, filters=user_filter))
+    application.add_handler(CommandHandler("retry", retry_handle, filters=user_filter))
+    application.add_handler(CommandHandler("new", new_dialog_handle, filters=user_filter))
+    application.add_handler(CommandHandler("cancel", cancel_handle, filters=user_filter))
 
     # application.add_handler(MessageHandler(filters.VOICE & user_filter, voice_message_handle))
 
     # application.add_handler(CommandHandler("mode", show_chat_modes_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(set_chat_mode_handle, pattern="^set_chat_mode"))
 
-    # application.add_handler(CommandHandler("settings", settings_handle, filters=user_filter))
+    application.add_handler(CommandHandler("settings", settings_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(set_settings_handle, pattern="^set_settings"))
 
-    # application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
+    application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
 
     application.add_error_handler(error_handle)
 
