@@ -43,16 +43,9 @@ user_semaphores = {}
 user_tasks = {}
 
 HELP_MESSAGE = """Commands:
-⚪ /retry – Regenerate last bot answer
-⚪ /new – Start new dialog
-⚪ /mode – Select chat mode
-⚪ /settings – Show settings
-⚪ /balance – Show balance
-⚪ /help – Show help
-
-🎨 Generate images from text prompts in <b>👩‍🎨 Artist</b> /mode
-👥 Add bot to <b>group chat</b>: /help_group_chat
-🎤 You can send <b>Voice Messages</b> instead of text
+⚪ /settings – Показать настройки
+⚪ /balance – Показать баланс
+⚪ /help – Показать комманды
 """
 
 HELP_GROUP_CHAT_MESSAGE = """You can add bot to any <b>group chat</b> to help and entertain its participants!
@@ -138,7 +131,7 @@ async def start_handle(update: Update, context: CallbackContext):
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
     db.start_new_dialog(user_id)
 
-    reply_text = "Hi! I'm <b>ChatGPT</b> bot implemented with OpenAI API 🤖\n\n"
+    reply_text = "Привет! Я <b>ChatGPT</b> 🤖\n\n"
     reply_text += HELP_MESSAGE
 
     await update.message.reply_text(reply_text, parse_mode=ParseMode.HTML)
@@ -212,7 +205,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
         if use_new_dialog_timeout:
             if (datetime.now() - db.get_user_attribute(user_id, "last_interaction")).seconds > config.new_dialog_timeout and len(db.get_dialog_messages(user_id)) > 0:
                 db.start_new_dialog(user_id)
-                await update.message.reply_text(f"Starting new dialog due to timeout (<b>{config.chat_modes[chat_mode]['name']}</b> mode) ✅", parse_mode=ParseMode.HTML)
+                # await update.message.reply_text(f"Starting new dialog due to timeout (<b>{config.chat_modes[chat_mode]['name']}</b> mode) ✅", parse_mode=ParseMode.HTML)
         db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
         # in case of CancelledError
@@ -289,7 +282,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
             raise
 
         except Exception as e:
-            error_text = f"Something went wrong during completion. Reason: {e}"
+            error_text = f"Что-то пошло не так. Reason: {e}"
             logger.error(error_text)
             await update.message.reply_text(error_text)
             return
@@ -300,7 +293,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                 text = "✍️ <i>Note:</i> Your current dialog is too long, so your <b>first message</b> was removed from the context.\n Send /new command to start new dialog"
             else:
                 text = f"✍️ <i>Note:</i> Your current dialog is too long, so <b>{n_first_dialog_messages_removed} first messages</b> were removed from the context.\n Send /new command to start new dialog"
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+            # await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
     async with user_semaphores[user_id]:
         task = asyncio.create_task(message_handle_fn())
@@ -309,7 +302,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
         try:
             await task
         except asyncio.CancelledError:
-            await update.message.reply_text("✅ Canceled", parse_mode=ParseMode.HTML)
+            await update.message.reply_text("✅ Отменено", parse_mode=ParseMode.HTML)
         else:
             pass
         finally:
@@ -322,8 +315,8 @@ async def is_previous_message_not_answered_yet(update: Update, context: Callback
 
     user_id = update.message.from_user.id
     if user_semaphores[user_id].locked():
-        text = "⏳ Please <b>wait</b> for a reply to the previous message\n"
-        text += "Or you can /cancel it"
+        text = "⏳ Пожалуйста <b>подождите</b> ответа на предыдущее сообщение\n"
+        text += "Или вы можете отменить его /cancel"
         await update.message.reply_text(text, reply_to_message_id=update.message.id, parse_mode=ParseMode.HTML)
         return True
     else:
@@ -423,7 +416,7 @@ async def cancel_handle(update: Update, context: CallbackContext):
         task = user_tasks[user_id]
         task.cancel()
     else:
-        await update.message.reply_text("<i>Nothing to cancel...</i>", parse_mode=ParseMode.HTML)
+        await update.message.reply_text("<i>Нечего отменять...</i>", parse_mode=ParseMode.HTML)
 
 
 def get_chat_mode_menu(page_index: int):
@@ -611,8 +604,8 @@ async def show_balance_handle(update: Update, context: CallbackContext):
     total_n_spent_dollars += voice_recognition_n_spent_dollars
 
 
-    text = f"You spent <b>{total_n_spent_dollars:.03f}$</b>\n"
-    text += f"You used <b>{total_n_used_tokens}</b> tokens\n\n"
+    text = f"Вы потратили <b>{total_n_spent_dollars:.03f}$</b>\n"
+    text += f"Вы использовали <b>{total_n_used_tokens}</b> токенов\n\n"
     text += details_text
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
@@ -620,7 +613,7 @@ async def show_balance_handle(update: Update, context: CallbackContext):
 
 async def edited_message_handle(update: Update, context: CallbackContext):
     if update.edited_message.chat.type == "private":
-        text = "🥲 Unfortunately, message <b>editing</b> is not supported"
+        text = "🥲 К сожалению, <b>изменение</b> сообщений не поддерживается"
         await update.edited_message.reply_text(text, parse_mode=ParseMode.HTML)
 
 
@@ -651,12 +644,12 @@ async def error_handle(update: Update, context: CallbackContext) -> None:
 
 async def post_init(application: Application):
     await application.bot.set_my_commands([
-        BotCommand("/new", "Start new dialog"),
-        BotCommand("/mode", "Select chat mode"),
-        BotCommand("/retry", "Re-generate response for previous query"),
-        BotCommand("/balance", "Show balance"),
-        BotCommand("/settings", "Show settings"),
-        BotCommand("/help", "Show help message"),
+        # BotCommand("/new", "Start new dialog"),
+        # BotCommand("/mode", "Select chat mode"),
+        # BotCommand("/retry", "Re-generate response for previous query"),
+        BotCommand("/balance", "Показать баланс"),
+        BotCommand("/settings", "показать настройки"),
+        BotCommand("/help", "Показать команды"),
     ])
 
 def run_bot() -> None:
@@ -678,7 +671,7 @@ def run_bot() -> None:
 
     application.add_handler(CommandHandler("start", start_handle, filters=user_filter))
     application.add_handler(CommandHandler("help", help_handle, filters=user_filter))
-    application.add_handler(CommandHandler("help_group_chat", help_group_chat_handle, filters=user_filter))
+    # application.add_handler(CommandHandler("help_group_chat", help_group_chat_handle, filters=user_filter))
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & user_filter, message_handle))
     application.add_handler(CommandHandler("retry", retry_handle, filters=user_filter))
